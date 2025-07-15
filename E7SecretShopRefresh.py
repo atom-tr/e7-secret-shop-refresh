@@ -89,7 +89,7 @@ class RefreshStatistic:
             writer.writerow(data)
 
 class SecretShopRefresh:
-    def __init__(self, title_name: str, callback = None, tk_instance: tk = None, budget: int = None, allow_move: bool = False, debug: bool = False):
+    def __init__(self, title_name: str, callback = None, tk_instance: tk = None, budget: int = None, allow_move: bool = False, debug: bool = False, join_thread: bool = False):
         #init state
         self.debug = debug
         self.loop_active = False
@@ -99,6 +99,7 @@ class SecretShopRefresh:
         self.callback = callback if callback else self.refreshFinishCallback
         self.budget = budget
         self.allow_move = allow_move
+        self.join_thread = join_thread
 
         self.loading_asset = cv2.imread(os.path.join('assets', 'loading.jpg'))
         self.loading_asset= cv2.cvtColor(self.loading_asset, cv2.COLOR_BGR2GRAY)
@@ -124,6 +125,9 @@ class SecretShopRefresh:
         refresh_thread.daemon = True
         keyboard_thread.start()
         refresh_thread.start()
+        if self.join_thread:
+            keyboard_thread.join()
+            refresh_thread.join()
 
     #Threads
     def checkKeyPress(self):
@@ -180,13 +184,16 @@ class SecretShopRefresh:
             # window.minimize()
             # window.maximize()
             # window.restore()
-            self.window.activate()
+            try:
+                self.window.activate()
+            except Exception as e:
+                print(e)
 
             self.clickShop()
             time.sleep(1)
             
             #item sliding const
-            sliding_time = (1 - self.mouse_sleep) if self.mouse_sleep <= 1 else 0
+            sliding_time = 0.7 + self.screenshot_sleep if self.screenshot_sleep >= 0.3 else 1
 
             #Loop for how the 
             while self.loop_active:
@@ -355,7 +362,10 @@ class SecretShopRefresh:
             # window.minimize()
             # window.maximize()
             # window.restore()
-            self.window.activate()
+            try:
+                self.window.activate()
+            except Exception as e:
+                print(e)
 
             #fix pyautogui's multiscreen bug
             #screenshot = pyautogui.screenshot(region=(self.window.left, self.window.top, self.window.width, self.window.height))
@@ -407,7 +417,7 @@ class SecretShopRefresh:
         
         if loc[0].size > 0:
             x = self.window.left + self.window.width*0.90
-            y = self.window.top + loc[0][0] + process_item.shape[0]*3//4
+            y = self.window.top + loc[0][0] + process_item.shape[0]*0.85
             pos = (x, y)        
             return pos
         return None
@@ -447,7 +457,7 @@ class SecretShopRefresh:
 
     def clickConfirmRefresh(self):
         x = self.window.left + self.window.width * 0.58
-        y = self.window.top + self.window.height * 0.62
+        y = self.window.top + self.window.height * 0.65
         pyautogui.moveTo(x, y)
         pyautogui.click(clicks=2, interval=self.mouse_sleep)
         time.sleep(self.screenshot_sleep)   #Account for Loading
@@ -456,7 +466,7 @@ class SecretShopRefresh:
     def clickShop(self):
         #wake window
         x = self.window.left + self.window.width * 0.05
-        y = self.window.top + self.window.height * 0.32
+        y = self.window.top + self.window.height * 0.41
         pyautogui.moveTo(x, y)
         pyautogui.click()
 
@@ -472,22 +482,22 @@ class SecretShopRefresh:
 
         #new lobby
         x = self.window.left + self.window.width * 0.05
-        y = self.window.top + self.window.height * 0.32
+        y = self.window.top + self.window.height * 0.41
         pyautogui.moveTo(x, y)
         pyautogui.click()
 
     def scrollShop(self):
         x = self.window.left + self.window.width * 0.58
-        y = self.window.top + self.window.height * 0.62
+        y = self.window.top + self.window.height * 0.65
         pyautogui.moveTo(x, y)
         pyautogui.mouseDown(button='left')
-        pyautogui.moveTo(x, y-self.window.height*0.28)
+        pyautogui.moveTo(x, y-self.window.height*0.277)
         pyautogui.mouseUp(button='left')
     
     def scrollUp(self):
         x = self.window.left + self.window.width * 0.58
-        y = self.window.top + self.window.height * 0.62
-        pyautogui.moveTo(x, y-self.window.height*0.28)
+        y = self.window.top + self.window.height * 0.65
+        pyautogui.moveTo(x, y-self.window.height*0.277)
         pyautogui.mouseDown(button='left')
         pyautogui.moveTo(x, y)
         pyautogui.mouseUp(button='left')
@@ -499,7 +509,8 @@ class AppConfig():
         self.RECOGNIZE_TITLES = {'Epic Seven',
                                  'BlueStacks App Player',
                                  'LDPlayer',
-                                 'MuMu Player 12'}        #if detected title show up in the select bar so that you don't need to manual enter
+                                 'MuMu Player 12',
+                                 '에픽세븐'}        #if detected title show up in the select bar so that you don't need to manual enter
         self.ALL_PATH = ['cov.jpg', 'mys.jpg', 'fb.jpg']        #Path to all the image
         self.ALL_NAME = ['Covenant bookmark','Mystic medal','Friendship bookmark']      #Name to all the image
         self.ALL_PRICE = [184000,280000,18000]      #Price to the image
@@ -567,7 +578,7 @@ class AutoRefreshGUI:
                                     values=titles)
         titles_combo_box.config()       #apply ui change here
         titles_combo_box.bind('<<ComboboxSelected>>', onSelect)
-        titles_combo_box.bind('<Return>', onEnter)
+        titles_combo_box.bind('<KeyRelease>', onEnter)
         
         #special setting
         special_frame = tk.Frame(self.root, bg=self.unite_bg_color)
@@ -774,19 +785,35 @@ if __name__ == '__main__':
     # # call_back: func      callback function when the macro terminates
     # # budget: int          the ammont of skystone that you want to spend
     # # debug: boolean       this will help you debug problem with the program
+    # # join_thread: boolean        you have to join thread if nothing is blocking the main process from completing
+    
+    # if not os.path.isdir(os.path.join('assets')):
+    #     print('\'assets\' folder is missing! Make sure you have the assets folder in the same directory')
+    #     input('Press enter to exit ...')
 
-    # print('Here are the active windows\n')
-    # for title in gw.getAllTitles():
-    #     if title != '':
-    #         print(title)
-    
-    # win = input('Emulator: ')
-    # if win != '':
-    
-    #     ssr = SecretShopRefresh(win, budget=None)       #init macro instance with the application title being epic seven
-    #     ssr.addShopItem('cov.jpg', 'Covenant bookmark', 184000)     #adding items to refresh, cov.jpg needs to be in: assets/cov.jpg
-    #     ssr.addShopItem('mys.jpg', 'Mystic medal', 280000)
-    #     #ssr.addShopItem('fb.jpg', 'Friendship bookmark', 18000)     #comment out this, if you don't need to test
-    #     input('press any key to start')
-    #     ssr.start()     #Start macro instance, use ESC to terminate macro
-    # # Eric baby piles approved
+    # else:
+    #     print('Here are the active windows\n')
+    #     for title in gw.getAllTitles():
+    #         if title != '':
+    #             print(title)
+    #     print()
+    #     win = input('Emulator\'s window name: ')
+        
+    #     if win in gw.getAllTitles() and win != '':
+    #         try:
+    #             budget = int(input('Amount of skystone that you want to spend: '))
+    #         except:
+    #             print('invalid input, default to 1000 skystone budget')
+    #             budget = 1000
+
+    #         ssr = SecretShopRefresh(title_name=win, budget=budget, join_thread=True)       #init macro instance with the application title being epic seven
+    #         ssr.addShopItem('cov.jpg', 'Covenant bookmark', 184000)     #adding items to refresh, cov.jpg needs to be in: assets/cov.jpg
+    #         ssr.addShopItem('mys.jpg', 'Mystic medal', 280000)
+    #         #ssr.addShopItem('fb.jpg', 'Friendship bookmark', 18000)     #comment out this, if you don't need to test
+    #         input('press Enter to start ...')
+    #         print('press esc to stop shop refresh')
+    #         ssr.start()     #Start macro instance, use ESC to terminate macro
+
+    #     else:
+    #         input('Wrong title, close program')    
+    #     # Eric baby piles approved
